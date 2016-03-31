@@ -12,7 +12,7 @@ from threading import Thread
 INET_IP = '127.0.0.1' #done on localhost
 INPUT_PORT = 5001 #port used for the receiving proxy socket
 OUTPUT_PORT = 5002 #port used for the receiving server socket
-BUFFER_SIZE = 64 #Allocated size for data being received by socket, this can be integrated within the message(dynamic buffer size)
+BUFFER_SIZE = 2048 #Allocated size for data being received by socket, this can be integrated within the message(dynamic buffer size)
 
 #sockets used
 inputSenderSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
