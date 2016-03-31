@@ -1,22 +1,23 @@
-'''Piece of code that reads input from a socket (arbitrary) and writes it to another socket
-proxy is used to receive data from one socket (client), do something with the data and write it to another socket
-for the server to read from
-'''
+"""Piece of code that reads input from a socket (arbitrary data) and writes it to another socket
+proxy is used to receive data from one socket (client), do something with the data(processing), and write it to another
+socket for the server to read from
+"""
 
 
 import socket
 from threading import Thread
-import struct
+#import struct
 
 
 INET_IP = '127.0.0.1' #done on localhost
 INPUT_PORT = 5001 #port used for the receiving proxy socket
 OUTPUT_PORT = 5002 #port used for the receiving server socket
-BUFFER_SIZE = 64
+BUFFER_SIZE = 64 #Allocated size for data being received by socket, this can be integrated within the message(dynamic buffer size)
 
 #sockets used
 inputSenderSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 proxyReceiverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
 proxyOutputSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 serverReceiverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -24,24 +25,23 @@ serverReceiverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 messageReceived = True
 
 
-#Generates some data message and sends to socket
+'''Generates some data message and writes to proxy socket
+'''
 def generateInputsocket():
     message = "Here is some data"
+    #message = struct.pack(">i", len(message)) + message
     inputSenderSocket.connect((INET_IP, INPUT_PORT))
     print "Client : " + str(inputSenderSocket.getsockname())
     inputSenderSocket.sendall(message)
-    try:
-        responce = inputSenderSocket.recv(BUFFER_SIZE)
-    except:
-        print "Buffer size to small"
+    responce = inputSenderSocket.recv(BUFFER_SIZE)
+
     inputSenderSocket.close()
 
 
-
-#Proxy receives data (can do processing) and copies it to another socket (destined for the server)
+'''Proxy receives data (can do processing) and copies it to another socket (destined for the server)
 #inputSocket = client socket that prxy reads input from,
 #outputSocket = socket used for output, writing the input received on this socket (for server)
-#
+'''
 def proxy(inputSocket, outputSocket):
 
     inputSocket.bind((INET_IP, INPUT_PORT))
@@ -50,25 +50,26 @@ def proxy(inputSocket, outputSocket):
     connection, address = inputSocket.accept()
 
     outputSocket.connect((INET_IP, OUTPUT_PORT))
-
     while 1:
         try:
             data = connection.recv(BUFFER_SIZE)
             if not data: break
             print "Data received, Doing something with it"
-            data = data + " And  i added this"
+            connection.send(str(messageReceived))#send acknowledgment
             proxyOutput(outputSocket, data)
-        except:
+        except socket.error:
             print "Buffer size to small"
             break
-        connection.send(str(messageReceived))#send acknowledgment
 
     connection.close()
 
 
-#outputs proxy data to server socket
+
+
+'''outputs proxy data to server socket
 #sock = second socket to write data on
 #data = input received from 1st socket(client)
+'''
 def proxyOutput(sock, data):
       print "Proxy Sender: " + str(sock.getsockname())
       sock.send(data)
@@ -76,7 +77,8 @@ def proxyOutput(sock, data):
       sock.close()
 
 
-#Server reads data from proxy socket
+'''Server reads data written by proxy socket
+'''
 def server():
      serverReceiverSocket.bind((INET_IP, OUTPUT_PORT))
      print "Server: " + str(serverReceiverSocket.getsockname())
@@ -88,14 +90,15 @@ def server():
              if not data: break
              print data
              serverConn.send(str(messageReceived))#send acknowledgment
-         except:
+         except socket.error:
             print "Buffer size to small"
             break
      serverConn.close()
 
 
-#runs 3 separate threads representing 3 different processes:
+'''runs 3 separate threads representing 3 different processes:
 # proxy handles receiving input from client, processing and writing to server socket.
+'''
 def main():
      try :
         Thread(target=proxy, args=(proxyReceiverSocket, proxyOutputSocket)).start()
