@@ -61,7 +61,7 @@ def proxy(inputSocket, outputSocket):
         except:
             print "Buffer size to small"
             break
-        connection.send(str(messageReceived))#send response
+        connection.send(str(messageReceived))#send acknowledgment
 
     connection.close()
 
@@ -87,7 +87,7 @@ def server():
              data = serverConn.recv(BUFFER_SIZE)
              if not data: break
              print data
-             serverConn.send(str(messageReceived))#send response
+             serverConn.send(str(messageReceived))#send acknowledgment
          except:
             print "Buffer size to small"
             break
