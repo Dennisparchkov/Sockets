@@ -5,63 +5,124 @@ socket for the server to read from
 
 
 import socket
+import time
+import errno
+import sys
 from threading import Thread
-#import struct
 
 
-INET_IP = '127.0.0.1' #done on localhost
-INPUT_PORT = 5001 #port used for the receiving proxy socket
-OUTPUT_PORT = 5002 #port used for the receiving server socket
-BUFFER_SIZE = 2048 #Allocated size for data being received by socket, this can be integrated within the message(dynamic buffer size)
+INET_IP = '127.0.0.1'  # done on localhost
+INPUT_PORT = 5001  # port used for the receiving proxy socket
+OUTPUT_PORT = 5002  # port used for the receiving server socket
+BUFFER_SIZE = 1024  # Allocated size for data being received by socket
 
-#sockets used
+# sockets used
 inputSenderSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 proxyReceiverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 proxyOutputSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 serverReceiverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-#boolean representing a successful reception of data from a process
+# boolean representing a successful reception of data from a process
 messageReceived = True
 
 
-'''Generates some data message and writes to proxy socket
-'''
-def generateInputsocket():
-    message = "Here is some data"
-    #message = struct.pack(">i", len(message)) + message
-    inputSenderSocket.connect((INET_IP, INPUT_PORT))
-    print "Client : " + str(inputSenderSocket.getsockname())
-    inputSenderSocket.sendall(message)
-    responce = inputSenderSocket.recv(BUFFER_SIZE)
+# '''Generates some data message and writes to proxy socket
+# '''
+# def generateInputsocket():
+#     message = 4096*"0"
+#
+#     try:
+#         inputSenderSocket.connect((INET_IP, INPUT_PORT))
+#         print "Client : " + str(inputSenderSocket.getsockname())
+#         inputSenderSocket.sendall(message)
+#         response = inputSenderSocket.recv(BUFFER_SIZE)
+#         if response:
+#             inputSenderSocket.close()
+#
+#     except socket.error, exception:
+#         errorCode = exception[0]
+#
+#         if errorCode == errno.ECONNREFUSED:
+#             print "Connection problem"
+#         elif errorCode == errno.WSAECONNRESET:
+#             print "Connection was forced to close"
+#
+#
 
-    inputSenderSocket.close()
+
+
+
 
 
 '''Proxy receives data (can do processing) and copies it to another socket (destined for the server)
 #inputSocket = client socket that prxy reads input from,
 #outputSocket = socket used for output, writing the input received on this socket (for server)
 '''
-def proxy(inputSocket, outputSocket):
+def proxy(inputSocket, inputIP, inputPort,  outputSocket, outputIP, outputPort):
 
-    inputSocket.bind((INET_IP, INPUT_PORT))
-    print "Proxy receiver : " + str(inputSocket.getsockname())
-    inputSocket.listen(5)
-    connection, address = inputSocket.accept()
+    try:
+        ''' receive message from socket inputSocket
+        '''
+        inputSocket.bind((inputIP, inputPort))
+        print "Proxy receiver : " + str(inputSocket.getsockname())
+        inputSocket.listen(5)
+        connection, address = inputSocket.accept()
 
-    outputSocket.connect((INET_IP, OUTPUT_PORT))
+        message = proxyReceiveMessage(connection)
+    except socket.error, e:
+        errorCode = e[0]
+        if errorCode == errno.EBADF:
+            print "bad file descriptor: error 9 on receiving socket"
+        sys.exit("Something went wrong with the connection on receiving socket")
+
+    try:
+        ''' write message to out
+        put socket
+        '''
+        connection.send(str(messageReceived))  # send acknowledgment that timeout occurred (no more data on socket)
+
+        print len(message)
+        outputSocket.connect((outputIP, outputPort))
+        proxyOutput(outputSocket, message)
+        connection.close()
+        outputSocket.close()
+    except socket.error, exception:
+        errorCode = exception[0]
+        if errorCode == errno.ECONNREFUSED:
+            print "Connection problem with output socket"
+        elif errorCode == errno.WSAECONNRESET:
+            print "Connection was forced to close with output socket"
+
+
+
+
+def proxyReceiveMessage(connection):
+    connection.setblocking(0)
+    message = [];
+    begin = time.time()
+    timeout = 1 #seconds
     while 1:
-        try:
-            data = connection.recv(BUFFER_SIZE)
-            if not data: break
-            print "Data received, Doing something with it"
-            connection.send(str(messageReceived))#send acknowledgment
-            proxyOutput(outputSocket, data)
-        except socket.error:
-            print "Buffer size to small"
+        if message and time.time()-begin>timeout:
             break
+        try:
+            data = connection.recv(1024)
+            if data:
+                message.append(data)
+                begin = time.time()
+            else:
+                time.sleep(0.1)
+        except socket.error, e:
+            errorCode = e[0]
+            if errorCode == errno.EWOULDBLOCK:  # non-blocking handler, try again
+                pass
+            else:  # unknown error
+                raise e
 
-    connection.close()
+    message = ''.join(message)
+    return message
+
+
 
 
 
@@ -71,47 +132,49 @@ def proxy(inputSocket, outputSocket):
 #data = input received from 1st socket(client)
 '''
 def proxyOutput(sock, data):
-      print "Proxy Sender: " + str(sock.getsockname())
-      sock.send(data)
-      response = sock.recv(BUFFER_SIZE)
-      sock.close()
+    try:
+        print "Proxy Sender: " + str(sock.getsockname())
+        sock.send(data)
+        response = sock.recv(BUFFER_SIZE)
+    except socket.error, exception:
+        raise exception
 
 
-'''Server reads data written by proxy socket
-'''
-def server():
-     serverReceiverSocket.bind((INET_IP, OUTPUT_PORT))
-     print "Server: " + str(serverReceiverSocket.getsockname())
-     serverReceiverSocket.listen(1)
-     serverConn, addr = serverReceiverSocket.accept()
-     while 1:
-         try:
-             data = serverConn.recv(BUFFER_SIZE)
-             if not data: break
-             print data
-             serverConn.send(str(messageReceived))#send acknowledgment
-         except socket.error:
-            print "Buffer size to small"
-            break
-     serverConn.close()
-
-
-'''runs 3 separate threads representing 3 different processes:
-# proxy handles receiving input from client, processing and writing to server socket.
-'''
-def main():
-     try :
-        Thread(target=proxy, args=(proxyReceiverSocket, proxyOutputSocket)).start()
-        Thread(target=generateInputsocket, args=()).start() #generates input data.
-        Thread(target=server, args=()).start() #echo server for reading from second socket.
-     except:
-         print "cannot start thereads"
-
-
-
-
-if __name__ == "__main__":
-   main()
+# '''Server reads data written by proxy socket
+# '''
+# def server():
+#      serverReceiverSocket.bind((INET_IP, OUTPUT_PORT))
+#      print "Server: " + str(serverReceiverSocket.getsockname())
+#      serverReceiverSocket.listen(1)
+#      serverConn, addr = serverReceiverSocket.accept()
+#      while 1:
+#          try:
+#              data = serverConn.recv(BUFFER_SIZE)
+#              if not data: break
+#              print len(data)
+#              serverConn.send(str(messageReceived))#send acknowledgment
+#          except socket.error:
+#             print "Buffer size to small server"
+#             break
+#      serverConn.close()
+#
+#
+# '''runs 3 separate threads representing 3 different processes:
+# # proxy handles receiving input from client, processing and writing to server socket.
+# '''
+# def main():
+#      try :
+#         #Thread(target=proxy, args=(proxyReceiverSocket,INET_IP, INPUT_PORT, proxyOutputSocket, INET_IP, OUTPUT_PORT)).start()
+#         Thread(target=generateInputsocket, args=()).start() #generates input data.
+#         Thread(target=server, args=()).start() #generates input data.
+#      except:
+#          print "cannot start thereads"
+#
+#
+#
+#
+# if __name__ == "__main__":
+#    main()
 
 
 
