@@ -66,7 +66,7 @@ class TestProxy(Thread):
 class TestProxyReceiveMethods(unittest.TestCase):
 
     def test_proxy_receive_message(self):
-        longMessage = 16000 * '1'
+        longMessage = 4096 * '0'
 
         proxy = TestProxy(5002)
         proxy.start()
