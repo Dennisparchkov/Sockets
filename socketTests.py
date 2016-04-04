@@ -203,31 +203,38 @@ class TestProxyOutputMethods(unittest.TestCase):
 
 class TestProxyTotal(unittest.TestCase):
     '''
-    Test the full proxy given 2 sockets and port numbers
+    Test the full proxy given 2 sockets and port numbers, tests long message and null message
     '''
 
-    message = 4096 * '1'
-    proxyInputSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    proxyOutputSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    message = 16000*'1'
+    emptyMessage = ''
+
+
 
     def test_proxy_receive_and_output(self):
+        self.proxy_test(self.message)
 
-        testProxy = TestProxy(5001, 5002, self.proxyInputSocket, self.proxyOutputSocket)
+
+    def test_proxy_null_message(self):
+        self.proxy_test(self.emptyMessage)
+
+    def proxy_test(self, message):
+        proxyInputSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        proxyOutputSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        testProxy = TestProxy(5001, 5002, proxyInputSocket, proxyOutputSocket)
         testProxy.start()
 
         testServer = TestServer(5002)
         testServer.receiveMessage()
 
-        testClient = TestClient(self.message, 5001)
+        testClient = TestClient(message, 5001)
 
         #WAIT FOR THREADS TO FINISH
         testServer.join()
         testProxy.join()
 
         self.assertEqual(testClient.message, testServer.message)
-
-
-
 
 
 if __name__ == '__main__':
