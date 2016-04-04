@@ -60,10 +60,10 @@ def proxy(inputSocket, inputIP, inputPort,  outputSocket, outputIP, outputPort):
         errorCode = exception[0]
         if errorCode == errno.ECONNREFUSED:
             print "Connection problem with output socket"
-            raise exception
+            raise exception("Connection problem with output socket")
         elif errorCode == errno.WSAECONNRESET:
             print "Connection was forced to close with output socket"
-            raise exception
+            raise exception("Connection was forced to close with output socket")
         sys.exit("Something went wrong with the connection on Output socket")
 
 
