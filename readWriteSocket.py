@@ -8,58 +8,28 @@ import socket
 import time
 import errno
 import sys
-from threading import Thread
+
 
 
 INET_IP = '127.0.0.1'  # done on localhost
-INPUT_PORT = 5001  # port used for the receiving proxy socket
-OUTPUT_PORT = 5002  # port used for the receiving server socket
 BUFFER_SIZE = 1024  # Allocated size for data being received by socket
-
-# sockets used
-inputSenderSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-proxyReceiverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-proxyOutputSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-serverReceiverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 # boolean representing a successful reception of data from a process
 messageReceived = True
 
 
-# '''Generates some data message and writes to proxy socket
-# '''
-# def generateInputsocket():
-#     message = 4096*"0"
-#
-#     try:
-#         inputSenderSocket.connect((INET_IP, INPUT_PORT))
-#         print "Client : " + str(inputSenderSocket.getsockname())
-#         inputSenderSocket.sendall(message)
-#         response = inputSenderSocket.recv(BUFFER_SIZE)
-#         if response:
-#             inputSenderSocket.close()
-#
-#     except socket.error, exception:
-#         errorCode = exception[0]
-#
-#         if errorCode == errno.ECONNREFUSED:
-#             print "Connection problem"
-#         elif errorCode == errno.WSAECONNRESET:
-#             print "Connection was forced to close"
-#
-#
 
-
-
-
-
-
-'''Proxy receives data (can do processing) and copies it to another socket (destined for the server)
-#inputSocket = client socket that prxy reads input from,
-#outputSocket = socket used for output, writing the input received on this socket (for server)
-'''
 def proxy(inputSocket, inputIP, inputPort,  outputSocket, outputIP, outputPort):
+    '''
+    Proxy receives data (can do processing) and copies it to another socket (destined for the server)
+    :param inputSocket: client socket that proxy reads from
+    :param inputIP: IP address for input socket
+    :param inputPort: port number for input socket
+    :param outputSocket: proxy writes message to this socket
+    :param outputIP: output socket IP address
+    :param outputPort: output socket port
+    :return: null
+    '''
 
     try:
         ''' receive message from socket inputSocket
@@ -82,7 +52,6 @@ def proxy(inputSocket, inputIP, inputPort,  outputSocket, outputIP, outputPort):
         '''
         connection.send(str(messageReceived))  # send acknowledgment that timeout occurred (no more data on socket)
 
-        print len(message)
         outputSocket.connect((outputIP, outputPort))
         proxyOutput(outputSocket, message)
         connection.close()
@@ -91,19 +60,29 @@ def proxy(inputSocket, inputIP, inputPort,  outputSocket, outputIP, outputPort):
         errorCode = exception[0]
         if errorCode == errno.ECONNREFUSED:
             print "Connection problem with output socket"
+            raise exception
         elif errorCode == errno.WSAECONNRESET:
             print "Connection was forced to close with output socket"
+            raise exception
+        sys.exit("Something went wrong with the connection on Output socket")
 
 
 
 
 def proxyReceiveMessage(connection):
+    '''
+    handle receiving a message of any size by using timeouts. Timout is set th 1 second,
+    meaning that all the message has been received
+    :param connection: already connected socket to read message from
+    :return: message read from socket
+    '''
     connection.setblocking(0)
-    message = [];
+    message = []
     begin = time.time()
     timeout = 1 #seconds
     while 1:
-        if message and time.time()-begin>timeout:
+        if time.time()-begin > timeout:
+            #timeout
             break
         try:
             data = connection.recv(1024)
@@ -127,54 +106,21 @@ def proxyReceiveMessage(connection):
 
 
 
-'''outputs proxy data to server socket
-#sock = second socket to write data on
-#data = input received from 1st socket(client)
-'''
 def proxyOutput(sock, data):
+    '''
+    puts given data on to given socket
+    :param sock: socket to write data to
+    :param data: message to put on socket
+    :return: response message if successfull, can throw socket error for connection problem
+    '''
     try:
         print "Proxy Sender: " + str(sock.getsockname())
         sock.send(data)
-        response = sock.recv(BUFFER_SIZE)
+        return sock.recv(BUFFER_SIZE)
     except socket.error, exception:
         raise exception
 
 
-# '''Server reads data written by proxy socket
-# '''
-# def server():
-#      serverReceiverSocket.bind((INET_IP, OUTPUT_PORT))
-#      print "Server: " + str(serverReceiverSocket.getsockname())
-#      serverReceiverSocket.listen(1)
-#      serverConn, addr = serverReceiverSocket.accept()
-#      while 1:
-#          try:
-#              data = serverConn.recv(BUFFER_SIZE)
-#              if not data: break
-#              print len(data)
-#              serverConn.send(str(messageReceived))#send acknowledgment
-#          except socket.error:
-#             print "Buffer size to small server"
-#             break
-#      serverConn.close()
-#
-#
-# '''runs 3 separate threads representing 3 different processes:
-# # proxy handles receiving input from client, processing and writing to server socket.
-# '''
-# def main():
-#      try :
-#         #Thread(target=proxy, args=(proxyReceiverSocket,INET_IP, INPUT_PORT, proxyOutputSocket, INET_IP, OUTPUT_PORT)).start()
-#         Thread(target=generateInputsocket, args=()).start() #generates input data.
-#         Thread(target=server, args=()).start() #generates input data.
-#      except:
-#          print "cannot start thereads"
-#
-#
-#
-#
-# if __name__ == "__main__":
-#    main()
 
 
 
