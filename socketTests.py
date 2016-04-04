@@ -127,7 +127,7 @@ class TestProxyReceiveMethods(unittest.TestCase):
         self.assertEqual(client.message, proxy.message)
         client.closeSocket()
 
-    def test_proxy_receive_timeout_and_null_message(self):
+    def test_proxy_receive_timeout(self):
         startTime = time.time()
 
         shortestMessage = ''
