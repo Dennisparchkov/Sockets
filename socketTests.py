@@ -2,10 +2,7 @@ import unittest
 import readWriteSocket
 import socket
 import threading
-import time
-import errno
-import sys
-from StringIO import StringIO
+
 
 
 
@@ -23,7 +20,7 @@ class TestClient(threading.Thread):
         self.message = message
         self.connect()
         self.sendMessage()
-        self.response = self.receive()
+#        self.response = self.receive()
         self.closeSocket
 
 
@@ -46,7 +43,7 @@ class TestClient(threading.Thread):
 class TestServer(threading.Thread):
 
     '''
-    Mock server for testing
+    Mock TCP server for testing
     '''
 
     IP = '127.0.0.1'
@@ -61,15 +58,47 @@ class TestServer(threading.Thread):
             self.testServerSocket.bind((self.IP, self.portNumber))
             self.testServerSocket.listen(5)
             connection, address = self.testServerSocket.accept()
+            connection.setblocking(1)
+            connection.settimeout(1)
+            message = ''
+            while 1:
+                try:
+                    message = message + connection.recv(1024)
+                except socket.timeout:
+                    break
+            self.message = message
 
-            self.message = readWriteSocket.proxyReceiveMessage(connection)
+
             connection.send(str(True))
             connection.close()
 
     def receiveMessage(self):
             self.start()
 
+class TestServerUDP(threading.Thread):
+    '''
+    UDP server for porxy output test
+    '''
+    message = None
 
+    def __init__(self, port):
+        threading.Thread.__init__(self)
+        self.port = port
+        self.testServerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    def run(self):
+        self.testServerSocket.bind(("127.0.0.1", self.port))
+        self.testServerSocket.settimeout(1)
+        message = ''
+
+        while  1:
+            try:
+                data, address = self.testServerSocket.recvfrom(1024)
+                message = message + data
+            except socket.timeout:
+                break
+
+        self.message = message
 
 class TestProxy(threading.Thread):
     '''
@@ -80,7 +109,6 @@ class TestProxy(threading.Thread):
 
     def __init__(self, inputPort, outputPort, inputSocket, outputSocket):
         super(TestProxy, self).__init__()
-        self._stop = threading.Event()
         self.inputSocket = inputSocket
         self.outputSocket = outputSocket
         self.inputPort = inputPort
@@ -92,118 +120,31 @@ class TestProxy(threading.Thread):
             readWriteSocket.proxy(self.inputSocket, self.IP, self.inputPort, self.outputSocket, self.IP, self.outputPort)
         except socket.error, e:
             raise e
-            self._stop.set()
+
+class UpdClient():
+
+    IP = "127.0.0.1"
+
+    def __init__(self, message, port):
+        self.message = message
+        self.port = port
+        self.clientSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.send()
+
+    def send(self):
+        self.clientSock.sendto(self.message, (self.IP, self.port))
+
+
 
 
 #######################################################################################################################
 #TEST CASES
 
 
-class TestProxyReceiveMethods(unittest.TestCase):
+
+class TCPproxy(unittest.TestCase):
     '''
-    test the proxies receive method of different size messages, and timeout and null messages
-    '''
-
-    def test_proxy_receive_message(self):
-        longMessage = 4096 * '0'
-
-        proxy = TestServer(5002)
-        proxy.receiveMessage()
-        client = TestClient(longMessage, 5002)
-        proxy.join()
-
-        self.assertEqual(client.message, proxy.message)
-        client.closeSocket()
-
-
-    def test_proxy_receive_message_long_message(self):
-        longMessage = 16000 * '1'
-
-        proxy = TestServer(5001)
-        proxy.receiveMessage()
-        client = TestClient(longMessage, 5001)
-        proxy.join()
-
-        self.assertEqual(client.message, proxy.message)
-        client.closeSocket()
-
-    def test_proxy_receive_timeout(self):
-        startTime = time.time()
-
-        shortestMessage = ''
-
-
-        proxy = TestServer(5001)
-        proxy.receiveMessage()
-        client = TestClient(shortestMessage, 5001)
-        proxy.join()
-
-        endTime = time.time()
-
-        self.assertEqual(shortestMessage, proxy.message)
-        self.assertTrue(endTime - startTime > 1)
-        client.closeSocket()
-
-    def test_proxy_receive_null(self):
-        emptyMessage = ''
-
-        proxy = TestServer(5001)
-        proxy.receiveMessage()
-        client = TestClient(emptyMessage, 5001)
-
-        proxy.join()
-        client.closeSocket()
-        self.assertEqual(emptyMessage, proxy.message)
-
-
-class TestProxyOutputMethods(unittest.TestCase):
-
-    '''
-    Test the proxies output methods including erros du to connection, null messages and normal messages
-    '''
-
-    message = 4096*'0'
-    nullMessage = ''
-
-    def test_proxy_output_normal(self):
-        testServr = TestServer(5001)
-        testServr.receiveMessage()
-
-        outputsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        outputsocket.connect(('127.0.0.1', 5001))
-        readWriteSocket.proxyOutput(outputsocket, self.message)
-
-        testServr.join()
-        outputsocket.close()
-
-        self.assertEqual(self.message, testServr.message)
-
-    def test_proxy_output_error_no_connection(self):
-        try:
-            TestClient(self.message, 5001)
-        except socket.error, e:
-            self.assertEqual(e.errno, errno.ECONNREFUSED)
-        else:
-            self.fail("expecting connection error")
-
-
-    def test_proxy_output_null_message(self):
-        testServr = TestServer(5001)
-        testServr.receiveMessage()
-
-        outputsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        outputsocket.connect(('127.0.0.1', 5001))
-        readWriteSocket.proxyOutput(outputsocket, self.nullMessage)
-
-        testServr.join()
-        outputsocket.close()
-
-        self.assertEqual(self.nullMessage, testServr.message)
-
-
-class TestProxyTotal(unittest.TestCase):
-    '''
-    Test the full proxy given 2 sockets and port numbers, tests long message and null message
+    Test the full proxy given TCP 2 sockets and port numbers, tests long message and null message
     '''
 
     message = 16000*'1'
@@ -222,6 +163,7 @@ class TestProxyTotal(unittest.TestCase):
         proxyInputSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         proxyOutputSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+
         testProxy = TestProxy(5001, 5002, proxyInputSocket, proxyOutputSocket)
         testProxy.start()
 
@@ -235,6 +177,50 @@ class TestProxyTotal(unittest.TestCase):
         testProxy.join()
 
         self.assertEqual(testClient.message, testServer.message)
+
+class UDPproxy(unittest.TestCase):
+    '''
+    Test the full proxy given UDP 2 sockets and port numbers, tests long message and null message
+    '''
+
+    message = 1024*'1'
+    emptyMessage = ''
+
+
+
+    def test_proxy_receive_and_output(self):
+        self.proxy_test(self.message)
+
+
+    def test_proxy_null_message(self):
+        self.proxy_test(self.emptyMessage)
+
+    def proxy_test(self, message):
+
+        inputSocketUDP = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        outputSocketUDP = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+
+        testProxy = TestProxy(5001, 5002, inputSocketUDP, outputSocketUDP)
+        testProxy.start()
+
+
+
+
+
+
+        server = TestServerUDP(5002)
+        server.start()
+
+        UpdClient(message, 5001)
+
+
+        #WAIT FOR THREADS TO FINISH
+        server.join()
+        testProxy.join()
+
+        self.assertEqual(message, server.message)
+
 
 
 if __name__ == '__main__':

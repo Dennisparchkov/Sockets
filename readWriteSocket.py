@@ -5,7 +5,6 @@ socket for the server to read from
 
 
 import socket
-import time
 import errno
 import sys
 
@@ -36,89 +35,72 @@ def proxy(inputSocket, inputIP, inputPort,  outputSocket, outputIP, outputPort):
         '''
         inputSocket.bind((inputIP, inputPort))
         print "Proxy receiver : " + str(inputSocket.getsockname())
-        inputSocket.listen(5)
-        connection, address = inputSocket.accept()
+        #TCP socket
+        if inputSocket.type == 1 and outputSocket.type == 1:
+            inputSocket.listen(5)
+            connection, address = inputSocket.accept()
+            outputSocket.connect((outputIP, outputPort))
+            forwardTCP(connection, outputSocket)
+            connection.close()
+            outputSocket.close()
+        #UDP socket
+        elif inputSocket.type == 2 and outputSocket.type == 2 :
+            forwardUDP(inputSocket, outputSocket, outputPort)
 
-        message = proxyReceiveMessage(connection)
     except socket.error, e:
         errorCode = e[0]
         if errorCode == errno.EBADF:
             print "bad file descriptor: error 9 on receiving socket"
-        sys.exit("Something went wrong with the connection on receiving socket")
-
-    try:
-        ''' write message to out
-        put socket
-        '''
-        connection.send(str(messageReceived))  # send acknowledgment that timeout occurred (no more data on socket)
-
-        outputSocket.connect((outputIP, outputPort))
-        proxyOutput(outputSocket, message)
-        connection.close()
-        outputSocket.close()
-    except socket.error, exception:
-        errorCode = exception[0]
-        if errorCode == errno.ECONNREFUSED:
+        elif errorCode == errno.ECONNREFUSED:
             print "Connection problem with output socket"
-            raise exception("Connection problem with output socket")
+            raise e("Connection problem with output socket")
         elif errorCode == errno.WSAECONNRESET:
             print "Connection was forced to close with output socket"
-            raise exception("Connection was forced to close with output socket")
-        sys.exit("Something went wrong with the connection on Output socket")
+            raise e("Connection was forced to close with output socket")
+        sys.exit("Something went wrong with the connection on receiving socket")
 
 
 
 
-def proxyReceiveMessage(connection):
+def forwardUDP(input, output, outputPort):
     '''
-    handle receiving a message of any size by using timeouts. Timout is set th 1 second,
+     handle receiving a message of any size by using timeouts using UDP sockets. Timout is set th 1 second,
     meaning that all the message has been received
-    :param connection: already connected socket to read message from
-    :return: message read from socket
+    :param input: reading UDP socket
+    :param output: writing UDP socket
+    :return:
     '''
-    connection.setblocking(0)
-    message = []
-    begin = time.time()
-    timeout = 1 #seconds
+    input.setblocking(0)
+    input.settimeout(1)
     while 1:
-        if time.time()-begin > timeout:
-            #timeout
-            break
         try:
-            data = connection.recv(1024)
-            if data:
-                message.append(data)
-                begin = time.time()
-            else:
-                time.sleep(0.1)
+            output.sendto(input.recv(1024), ("127.0.0.1", outputPort))
         except socket.error, e:
-            errorCode = e[0]
-            if errorCode == errno.EWOULDBLOCK:  # non-blocking handler, try again
-                pass
-            else:  # unknown error
-                raise e
+            raise e
+        except socket.timeout:
+            break
 
-    message = ''.join(message)
-    return message
-
-
-
-
-
-
-def proxyOutput(sock, data):
+def forwardTCP(connection, out):
     '''
-    puts given data on to given socket
-    :param sock: socket to write data to
-    :param data: message to put on socket
-    :return: response message if successfull, can throw socket error for connection problem
+    handle receiving a message of any size by using timeouts using TCP sockets. Timout is set th 1 second,
+    meaning that all the message has been received
+    :param connection: receiving socket TCP
+    :param out: output socket TCP
+    :return:
     '''
-    try:
-        print "Proxy Sender: " + str(sock.getsockname())
-        sock.send(data)
-        return sock.recv(BUFFER_SIZE)
-    except socket.error, exception:
-        raise exception
+    connection.settimeout(1)
+    while 1:
+        try:
+            out.send(connection.recv(1024))
+        except socket.error, e:
+            raise e
+        except socket.timeout:
+            break
+
+
+
+
+
 
 
 
